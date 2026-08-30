@@ -79,7 +79,9 @@ corpus disadvantage.
     for white-box tests that must reach unexported internals. Every module
     starts with one English header comment stating its responsibility and
     allowed dependency direction. Comments are written in English; no
-    narrative inline comments.
+    narrative inline comments. Comments never cite STYLE.md or the design
+    documents by rule or section number — references rot; state the
+    constraint itself in place.
 12. One file, one responsibility.
 13. Third-party runtime dependencies default to zero; additions require
     review. Currently: base, typed-racket-lib (main distribution),

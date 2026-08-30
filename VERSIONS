@@ -1,0 +1,25 @@
+# Pinned toolchain and model versions. Upgrades are explicit commits.
+
+racket        9.2 (CS)
+
+python        3.14 — uv-managed venv at .venv/ (tools/setup-python.sh)
+uv            0.11+
+
+torch         2.13.0 — installed in .venv; the single installation serves
+              both the Python side (reference generation, the future
+              compilation sidecar) and the libtorch dylibs that
+              runtime/ffi dlopens from
+              .venv/lib/python3.14/site-packages/torch/lib.
+              Stable C ABI: 465 aoti_torch_* symbols in libtorch_cpu.dylib;
+              aoti_torch_abi_version() packs 2.13.0 (major<<56 | minor<<48).
+
+python deps   numpy, safetensors (reference generation)
+
+model (dev / operator parity)
+              HuggingFaceTB/SmolLM2-135M
+              LlamaForCausalLM, bf16, 30 layers, hidden 576, GQA 9/3,
+              intermediate 1536, vocab 49152, rope_theta 100000,
+              rms_norm_eps 1e-5, tied embeddings, no attention bias
+
+model (1B-class acceptance, later)
+              SmolLM2-1.7B (same family, same operator set; weights only)

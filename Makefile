@@ -1,6 +1,9 @@
 RACO ?= raco
 
-.PHONY: setup compile test fmt clean
+.PHONY: setup setup-python compile test fmt clean
+
+setup-python:
+	sh tools/setup-python.sh
 
 setup:
 	$(RACO) pkg install --skip-installed --link --name zhulong ./src

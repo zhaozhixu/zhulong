@@ -11,5 +11,6 @@ __pycache__
 .agent-shell
 compiled/
 tests/data/
-doc/\#*\#
-vendor/
+doc/
+\#*\#
+.venv/

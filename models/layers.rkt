@@ -1,6 +1,7 @@
 #lang zhulong
-;; Shared layer library (application level). v0: rms-norm — the design
-;; document's §3.1 example, exercising the full #lang zhulong chain.
+;; Shared layer library (application level). Layers are written in
+;; branch-free dataflow form. v0: rms-norm, exercising the full
+;; #lang zhulong chain.
 
 (provide rms-norm)
 

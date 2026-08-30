@@ -21,5 +21,7 @@ regardless of the src/ directory name. Tests live in tests/ as
 ## Commands
 
 - `make setup` — link-install the zhulong and models packages (once).
+- `make setup-python` — uv venv (.venv) with pinned torch; source of the
+  libtorch dylibs runtime/ffi dlopens and of reference generation.
 - `make test`  — compile and run all test suites.
 - `make fmt`   — format all .rkt files with raco fmt (config: .fmt.rkt).
