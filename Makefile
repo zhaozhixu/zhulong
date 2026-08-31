@@ -1,9 +1,15 @@
 RACO ?= raco
 
-.PHONY: setup setup-python compile test fmt clean
+.PHONY: setup setup-python shim reference compile test fmt clean
 
 setup-python:
 	sh tools/setup-python.sh
+
+shim:
+	racket tools/gen-wrapper.rkt
+
+reference:
+	.venv/bin/python tools/gen-reference.py
 
 setup:
 	$(RACO) pkg install --skip-installed --link --name zhulong ./src

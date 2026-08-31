@@ -3,8 +3,8 @@
 (provide Shape
          shape?
          shape-numel
-         broadcast-shapes
-         reduce-shape)
+         shape-broadcast
+         shape-reduce)
 
 (define-type Shape (Listof Nonnegative-Integer))
 
@@ -23,8 +23,8 @@
     [else #f]))
 
 ;; numpy broadcasting: right-aligned, size-1 dims stretch; #f if incompatible.
-(: broadcast-shapes (-> Shape Shape (U Shape #f)))
-(define (broadcast-shapes a b)
+(: shape-broadcast (-> Shape Shape (U Shape #f)))
+(define (shape-broadcast a b)
   (: go (-> Shape Shape Shape (U Shape #f)))
   (define (go ra rb acc)
     (match* (ra rb)
@@ -38,15 +38,15 @@
 
 ;; Result shape of a reduction: normalizes a possibly-negative axis, then
 ;; drops that axis (keep? = #f) or pins it to 1 (keep? = #t).
-(: reduce-shape (-> Shape Integer Boolean Shape))
-(define (reduce-shape s axis keep?)
+(: shape-reduce (-> Shape Integer Boolean Shape))
+(define (shape-reduce s axis keep?)
   (define rank (length s))
   (define ax
     (if (negative? axis)
         (+ rank axis)
         axis))
   (unless (and (>= ax 0) (< ax rank))
-    (raise-arguments-error 'reduce-shape "axis out of range" "axis" axis "shape" s))
+    (raise-arguments-error 'shape-reduce "axis out of range" "axis" axis "shape" s))
   (: dims Shape)
   (define dims
     (for/list ([d (in-list s)]

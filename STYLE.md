@@ -10,18 +10,20 @@ corpus disadvantage.
 
 1. **Functional-first, data-oriented.** Data is immutable structs
    (`#:transparent`) and S-expressions; behavior is pure functions. Mutable
-   state is allowed only in four named places: tensor handles and the arena
+   state is allowed only in four named places: ctensors and the arena
    (runtime/), registry and definition tables at module-load time
    (operator.rkt, lang.rkt), trace context (tracer instances), and caches.
    New mutable state requires review.
 2. **No racket/class, no units.** The project's only polymorphism is
-   apply-op dispatching on current-backend. A backend is a closed struct
+   operator-apply dispatching on current-backend. A backend is a closed struct
    with function slots: eager is a singleton; the tracer creates a fresh
    instance per trace, carrying that trace's state.
 3. **Macros do syntax and binding only, never computation.** Whitelist:
-   define-layer, define-model, with-eager, with-tensor, defrule, plus
-   lang.rkt internals. Every macro expands to calls into plain,
-   independently testable functions. syntax-parse appears only in lang.rkt.
+   define-layer, define-model, with-eager, with-tensor, defrule,
+   define-operator (operator.rkt), define-operator-impl
+   (runtime/ffi/ops.rkt), plus lang.rkt internals. Every macro expands to
+   calls into plain, independently testable functions. syntax-parse
+   appears only in modules that define whitelisted macros.
 4. **Delimited control stays inside tracer.rkt.** prompt/abort/continuations
    appear in no other module and no public interface.
 5. **Parameter whitelist:** current-backend; current-device (default
@@ -42,7 +44,14 @@ corpus disadvantage.
 ## Conventions
 
 7. Naming: kebab-case; predicates end in `?`; mutators end in `!`;
-   conversions read `a->b`. Private by default; export explicitly.
+   conversions read `a->b`. Multi-word names lead with the noun and put
+   the verb after it (operator-register!, ctensor-delete!,
+   shape-broadcast), so names sharing a subject sort and complete
+   together; exceptions are established Racket idioms (make-*,
+   call-with-*, current-*, define-*) and `a->b` conversions. Private by
+   default; export explicitly. Source stays ASCII: write `lambda`, never
+   the `λ` glyph (editors may render it as the glyph; the file must not
+   contain it).
 8. **Typed by default; untyped where the machinery demands it.** Modules
    are `#lang typed/racket` except: lang.rkt (macros), tracer.rkt
    (delimited control), FFI binding modules (ffi/unsafe forms), models/
@@ -63,9 +72,12 @@ corpus disadvantage.
    not round-trip through untyped land; for the one unavoidable hot edge
    (untyped model code → the operator API), measure under eager
    execution and, if it shows, drop the generated contracts on that edge
-   with typed/racket/unsafe (unsafe-provide) — tests then guard it.
-   contract-out remains the boundary form for the public surfaces of
-   untyped modules.
+   with typed/racket/unsafe (unsafe-provide) — tests then guard it. This
+   valve is in effect: generated any-wrap contracts cannot protect an
+   opaque ctensor at all, so the operator API surface (operator-apply, the
+   operator functions, the eager backend) ships via unsafe-provide for
+   correctness, with ctensors typed as the opaque CTensor. contract-out
+   remains the boundary form for the public surfaces of untyped modules.
 9. Destructure IR and S-expressions with racket/match; no car/cdr chains.
    Internal bindings use define and match-define, not let/let* — except
    for deliberate shadowing, a deliberately narrowed expression-local
@@ -81,7 +93,9 @@ corpus disadvantage.
     allowed dependency direction. Comments are written in English; no
     narrative inline comments. Comments never cite STYLE.md or the design
     documents by rule or section number — references rot; state the
-    constraint itself in place.
+    constraint itself in place. Comments describe what the code is, never
+    the plan around it (no "until X lands", "phase-N placeholder", "will
+    be added later") — schedule talk lives in the plan document.
 12. One file, one responsibility.
 13. Third-party runtime dependencies default to zero; additions require
     review. Currently: base, typed-racket-lib (main distribution),

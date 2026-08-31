@@ -3,34 +3,46 @@
 ;; resolution. ffi/unsafe is quarantined in runtime/ffi/;
 ;; other modules go through the safe exports of this directory. Bindings
 ;; grow with the eager backend; today: version, device/dtype constants,
-;; tensor lifecycle (create / metadata / copy / item / delete), and the
-;; resolver used by future bindings. Lifecycle here is manual — explicit
-;; delete-tensor!; finalizer-backed ownership arrives with the safe layer.
+;; ctensor lifecycle (create / metadata / copy / item / delete), and the
+;; symbol resolver. Lifecycle here is manual — explicit ctensor-delete!;
+;; ops.rkt attaches finalizers to the ctensors it produces.
 
 (require ffi/unsafe
          racket/runtime-path)
 
-(provide libtorch-available?
+(provide ctensor?
+         libtorch-available?
          libtorch-lib
          raw-fn
+         lazy-fn
+         check-code
          abi-version
          abi-version-string
          device-code
          dtype-code
-         contiguous-strides
-         make-empty-tensor
-         tensor-from-bytes
-         tensor->bytes
-         tensor-sizes
-         tensor-strides
-         tensor-dtype-code
-         tensor-device-code
-         tensor-storage-offset
-         tensor-data-ptr
-         tensor-copy!
-         tensor-item-f32
-         tensor-item-i64
-         delete-tensor!)
+         shape->strides
+         make-ctensor
+         bytes->ctensor
+         ctensor->bytes
+         ctensor-sizes
+         ctensor-strides
+         ctensor-dtype-code
+         ctensor-device-code
+         ctensor-storage-offset
+         ctensor-data-ptr
+         ctensor-copy!
+         ctensor-item-f32
+         ctensor-item-i64
+         ctensor-delete!
+         ctensor-reinterpret
+         ctensor-clone
+         ctensor-contiguous?
+         real->ctensor)
+
+;; A ctensor is an ATen tensor seen from C: an opaque pointer managed by
+;; libtorch. This predicate is the identity the typed world uses for it
+;; (tensor.rkt imports it as the opaque CTensor type).
+(define ctensor? cpointer?)
 
 (define-runtime-path this-dir ".")
 
@@ -71,7 +83,7 @@
   (get-ffi-obj name (libtorch-lib) type))
 
 (define (raw-const name)
-  (get-ffi-obj name (libtorch-lib) (_fun -> _int32) (λ () #f)))
+  (get-ffi-obj name (libtorch-lib) (_fun -> _int32) (lambda () #f)))
 
 ;; aoti_torch_abi_version packs major<<56 | minor<<48 (observed for 2.13.0).
 (define (abi-version)
@@ -109,7 +121,7 @@
           "aoti_torch_dtype_bool"))
 
 (define (lookup-const who table key)
-  (define name (hash-ref table key (λ () (raise-arguments-error who "unknown key" "key" key))))
+  (define name (hash-ref table key (lambda () (raise-arguments-error who "unknown key" "key" key))))
   (define f (raw-const name))
   (unless f
     (raise-arguments-error who "constant not exported by this libtorch" "symbol" name))
@@ -124,12 +136,12 @@
 ;; Symbols resolve on first call so the module loads without libtorch.
 (define (lazy-fn name type)
   (define f #f)
-  (λ args
+  (lambda args
     (unless f
       (set! f (raw-fn name type)))
     (apply f args)))
 
-(define (check who code)
+(define (check-code who code)
   (unless (zero? code)
     (error who "libtorch returned error code ~a" code)))
 
@@ -146,7 +158,7 @@
                  (code : _int32)
                  ->
                  (begin
-                   (check 'make-empty-tensor code)
+                   (check-code 'make-ctensor code)
                    out))))
 
 (define c-get-dim
@@ -157,7 +169,7 @@
                  (code : _int32)
                  ->
                  (begin
-                   (check 'tensor-sizes code)
+                   (check-code 'ctensor-sizes code)
                    out))))
 
 (define c-get-sizes
@@ -168,7 +180,7 @@
                  (code : _int32)
                  ->
                  (begin
-                   (check 'tensor-sizes code)
+                   (check-code 'ctensor-sizes code)
                    out))))
 
 (define c-get-strides
@@ -179,7 +191,7 @@
                  (code : _int32)
                  ->
                  (begin
-                   (check 'tensor-strides code)
+                   (check-code 'ctensor-strides code)
                    out))))
 
 (define c-get-dtype
@@ -190,7 +202,7 @@
                  (code : _int32)
                  ->
                  (begin
-                   (check 'tensor-dtype-code code)
+                   (check-code 'ctensor-dtype-code code)
                    out))))
 
 (define c-get-device-type
@@ -201,7 +213,7 @@
                  (code : _int32)
                  ->
                  (begin
-                   (check 'tensor-device-code code)
+                   (check-code 'ctensor-device-code code)
                    out))))
 
 (define c-get-storage-offset
@@ -212,7 +224,7 @@
                  (code : _int32)
                  ->
                  (begin
-                   (check 'tensor-storage-offset code)
+                   (check-code 'ctensor-storage-offset code)
                    out))))
 
 (define c-get-data-ptr
@@ -223,12 +235,12 @@
                  (code : _int32)
                  ->
                  (begin
-                   (check 'tensor-data-ptr code)
+                   (check-code 'ctensor-data-ptr code)
                    out))))
 
 (define c-copy
   (lazy-fn "aoti_torch_copy_"
-           (_fun _pointer _pointer _int32 -> (code : _int32) -> (check 'tensor-copy! code))))
+           (_fun _pointer _pointer _int32 -> (code : _int32) -> (check-code 'ctensor-copy! code))))
 
 (define c-item-f32
   (lazy-fn "aoti_torch_item_float32"
@@ -238,7 +250,7 @@
                  (code : _int32)
                  ->
                  (begin
-                   (check 'tensor-item-f32 code)
+                   (check-code 'ctensor-item-f32 code)
                    out))))
 
 (define c-item-i64
@@ -249,15 +261,15 @@
                  (code : _int32)
                  ->
                  (begin
-                   (check 'tensor-item-i64 code)
+                   (check-code 'ctensor-item-i64 code)
                    out))))
 
 (define c-delete
   (lazy-fn "aoti_torch_delete_tensor_object"
-           (_fun _pointer -> (code : _int32) -> (check 'delete-tensor! code))))
+           (_fun _pointer -> (code : _int32) -> (check-code 'ctensor-delete! code))))
 
 ;; Row-major strides for a given shape.
-(define (contiguous-strides shape)
+(define (shape->strides shape)
   (define-values (strides numel)
     (for/fold ([acc '()]
                [stride 1])
@@ -265,50 +277,112 @@
       (values (cons stride acc) (* stride d))))
   strides)
 
-(define (make-empty-tensor dtype shape #:strides [strides (contiguous-strides shape)])
+(define (make-ctensor dtype shape #:strides [strides (shape->strides shape)])
   (c-empty-strided (length shape) shape strides (dtype-code dtype) (device-code 'cpu) 0))
 
 ;; Copying constructor: the bytes are memcpy'd in, so the tensor owns its
 ;; storage and the byte string may be collected. Zero-copy from-blob is
 ;; reserved for the mmap-backed loader, whose arena keeps the mapping alive.
-(define (tensor-from-bytes dtype shape bs)
-  (define h (make-empty-tensor dtype shape))
-  (memcpy (tensor-data-ptr h) bs (bytes-length bs))
+(define (bytes->ctensor dtype shape bs)
+  (define h (make-ctensor dtype shape))
+  (memcpy (ctensor-data-ptr h) bs (bytes-length bs))
   h)
 
-(define (tensor->bytes h nbytes)
+(define (ctensor->bytes h nbytes)
   (define out (make-bytes nbytes))
-  (memcpy out (tensor-data-ptr h) nbytes)
+  (memcpy out (ctensor-data-ptr h) nbytes)
   out)
 
-(define (tensor-sizes h)
+(define (ctensor-sizes h)
   (define n (c-get-dim h))
   (define p (c-get-sizes h))
   (for/list ([i (in-range n)])
     (ptr-ref p _int64 i)))
 
-(define (tensor-strides h)
+(define (ctensor-strides h)
   (define n (c-get-dim h))
   (define p (c-get-strides h))
   (for/list ([i (in-range n)])
     (ptr-ref p _int64 i)))
 
-(define (tensor-dtype-code h)
+(define (ctensor-dtype-code h)
   (c-get-dtype h))
-(define (tensor-device-code h)
+(define (ctensor-device-code h)
   (c-get-device-type h))
-(define (tensor-storage-offset h)
+(define (ctensor-storage-offset h)
   (c-get-storage-offset h))
-(define (tensor-data-ptr h)
+(define (ctensor-data-ptr h)
   (c-get-data-ptr h))
 
-(define (tensor-copy! dst src)
+(define (ctensor-copy! dst src)
   (c-copy dst src 0))
 
-(define (tensor-item-f32 h)
+(define (ctensor-item-f32 h)
   (c-item-f32 h))
-(define (tensor-item-i64 h)
+(define (ctensor-item-i64 h)
   (c-item-i64 h))
 
-(define (delete-tensor! h)
+(define (ctensor-delete! h)
   (c-delete h))
+
+(define c-reinterpret
+  (lazy-fn "aoti_torch__reinterpret_tensor"
+           (_fun _pointer
+                 _int64
+                 (_list i _int64)
+                 (_list i _int64)
+                 _int64
+                 (out : (_ptr o _pointer))
+                 ->
+                 (code : _int32)
+                 ->
+                 (begin
+                   (check-code 'ctensor-reinterpret code)
+                   out))))
+
+(define c-clone
+  (lazy-fn "aoti_torch_clone"
+           (_fun _pointer
+                 (out : (_ptr o _pointer))
+                 ->
+                 (code : _int32)
+                 ->
+                 (begin
+                   (check-code 'ctensor-clone code)
+                   out))))
+
+(define c-is-contiguous
+  (lazy-fn "aoti_torch_is_contiguous"
+           (_fun _pointer
+                 (out : (_ptr o _stdbool))
+                 ->
+                 (code : _int32)
+                 ->
+                 (begin
+                   (check-code 'ctensor-contiguous? code)
+                   out))))
+
+(define c-scalar-f64
+  (lazy-fn "aoti_torch_scalar_to_tensor_float64"
+           (_fun _double
+                 (out : (_ptr o _pointer))
+                 ->
+                 (code : _int32)
+                 ->
+                 (begin
+                   (check-code 'real->ctensor code)
+                   out))))
+
+;; A strided view sharing storage with h; both ctensors are deleted
+;; independently (the storage is refcounted underneath).
+(define (ctensor-reinterpret h sizes strides offset)
+  (c-reinterpret h (length sizes) sizes strides offset))
+
+(define (ctensor-clone h)
+  (c-clone h))
+
+(define (ctensor-contiguous? h)
+  (c-is-contiguous h))
+
+(define (real->ctensor x)
+  (c-scalar-f64 (exact->inexact x)))

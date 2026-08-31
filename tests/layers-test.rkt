@@ -8,14 +8,14 @@
 
   (check-true (procedure? rms-norm))
   (check-equal? (def-info-kind (definition-info 'rms-norm)) 'layer)
-  (check-exn #rx"no current backend" (λ () (rms-norm (sym-tensor '(2 3) 'f32 0))))
+  (check-exn #rx"no current backend" (lambda () (rms-norm (sym-tensor '(2 3) 'f32 0))))
 
   ;; Shape-propagating spy: a minimal symbolic backend that checks the call
   ;; sequence and the keep-dim broadcast through rms-norm.
   (define seen '())
   (define spy
     (backend 'spy
-             (λ (op args attrs)
+             (lambda (op args attrs)
                (define shape ((operator-shape-rule op) (map value-shape args) attrs))
                (define dtype ((operator-dtype-rule op) (map value-dtype args) attrs))
                (set! seen (cons (operator-name op) seen))

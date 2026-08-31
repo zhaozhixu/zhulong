@@ -20,7 +20,7 @@
 
 (define definitions (make-hasheq))
 
-(define (register-definition! name kind loc)
+(define (definition-register! name kind loc)
   (hash-set! definitions name (def-info kind loc)))
 
 (define (definition-info name)
@@ -34,7 +34,7 @@
      #'(begin
          (define (name . formals)
            body ...)
-         (register-definition! 'name 'layer (quote-srcloc name)))]))
+         (definition-register! 'name 'layer (quote-srcloc name)))]))
 
 (define-syntax (define-model stx)
   (syntax-parse stx
@@ -42,4 +42,4 @@
      #'(begin
          (define (name . formals)
            body ...)
-         (register-definition! 'name 'model (quote-srcloc name)))]))
+         (definition-register! 'name 'model (quote-srcloc name)))]))

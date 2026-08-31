@@ -9,6 +9,7 @@
 
 (define (the-formatter-map s)
   (case s
-    [("define-layer" "define-model") (format-define-like)]
+    [("define-layer" "define-model" "define-operator" "define-operator-impl")
+     (format-define-like)]
     [("struct") (format-define-like)]
     [else #f]))

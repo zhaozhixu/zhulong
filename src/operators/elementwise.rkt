@@ -1,30 +1,25 @@
 #lang typed/racket
-;; Registry entries and user-facing functions: elementwise family plus mean.
-;; Dtypes resolve through resolve-dtype: strong dtypes must agree, weak
-;; scalars defer. attr values arrive as Any and are asserted at the seam
-;; into the precisely typed shape algebra.
+;; Registry entries and user-facing functions: elementwise family plus the
+;; reductions mean/amax/argmax. Dtypes resolve through dtype-resolve:
+;; strong dtypes must agree, weak scalars defer. attr values arrive as Any
+;; and are asserted at the seam into the precisely typed shape algebra.
 
-(require "../shape.rkt"
+(require typed/racket/unsafe
+         "../shape.rkt"
          "../tensor.rkt"
          "../operator.rkt")
 
-(provide add
-         mul
-         sqr
-         rsqrt
-         mean)
+;; Operator functions return tensors to untyped model code — the hot edge
+;; where generated contracts are dropped (tests stand guard).
+(unsafe-provide add sub mul div neg absolute sqr rsqrt silu to-dtype mean amax argmax)
 
 (: broadcast-shape-rule (-> Symbol ShapeRule))
 (define ((broadcast-shape-rule who) shapes attrs)
   (match shapes
     [(list a b)
-     (or (broadcast-shapes a b)
+     (or (shape-broadcast a b)
          (raise-arguments-error who "shapes not broadcastable" "left" a "right" b))]
     [_ (raise-arguments-error who "expects 2 inputs" "got" (length shapes))]))
-
-(: same-dtype-rule (-> Symbol DtypeRule))
-(define ((same-dtype-rule who) dtypes attrs)
-  (resolve-dtype who dtypes))
 
 (: unary-shape-rule ShapeRule)
 (define (unary-shape-rule shapes attrs)
@@ -32,37 +27,73 @@
     [(list s) s]
     [_ (raise-arguments-error 'unary-shape-rule "expects 1 input" "got" (length shapes))]))
 
-(: mean-shape-rule ShapeRule)
-(define (mean-shape-rule shapes attrs)
+(: reduce-shape-rule ShapeRule)
+(define (reduce-shape-rule shapes attrs)
   (match shapes
     [(list s)
-     (reduce-shape s
+     (shape-reduce s
                    (assert (attr-ref attrs 'axis) exact-integer?)
                    (and (attr-ref attrs 'keep-dim #f) #t))]
-    [_ (raise-arguments-error 'mean "expects 1 input" "got" (length shapes))]))
+    [_ (raise-arguments-error 'reduce-shape-rule "expects 1 input" "got" (length shapes))]))
 
-(register-operator! (operator 'add (broadcast-shape-rule 'add) (same-dtype-rule 'add) #f #f))
-(register-operator! (operator 'mul (broadcast-shape-rule 'mul) (same-dtype-rule 'mul) #f #f))
-(register-operator! (operator 'sqr unary-shape-rule (same-dtype-rule 'sqr) #f #f))
-(register-operator! (operator 'rsqrt unary-shape-rule (same-dtype-rule 'rsqrt) #f #f))
-(register-operator! (operator 'mean mean-shape-rule (same-dtype-rule 'mean) #f #f))
+(: cast-dtype-rule DtypeRule)
+(define (cast-dtype-rule dtypes attrs)
+  (assert (attr-ref attrs 'dtype) dtype?))
 
-(: add (-> Value Value Any))
-(define (add a b)
-  (apply-op 'add (list a b)))
+(: i64-dtype-rule DtypeRule)
+(define (i64-dtype-rule dtypes attrs)
+  'i64)
 
-(: mul (-> Value Value Any))
-(define (mul a b)
-  (apply-op 'mul (list a b)))
+(define-operator (add a b)
+  #:shape (broadcast-shape-rule 'add)
+  #:dtype (same-dtype-rule 'add))
 
-(: sqr (-> Value Any))
-(define (sqr x)
-  (apply-op 'sqr (list x)))
+(define-operator (sub a b)
+  #:shape (broadcast-shape-rule 'sub)
+  #:dtype (same-dtype-rule 'sub))
 
-(: rsqrt (-> Value Any))
-(define (rsqrt x)
-  (apply-op 'rsqrt (list x)))
+(define-operator (mul a b)
+  #:shape (broadcast-shape-rule 'mul)
+  #:dtype (same-dtype-rule 'mul))
 
-(: mean (-> Value #:axis Integer [#:keep-dim? Any] Any))
-(define (mean x #:axis axis #:keep-dim? [keep-dim #f])
-  (apply-op 'mean (list x) (list (cons 'axis axis) (cons 'keep-dim keep-dim))))
+(define-operator (div a b)
+  #:shape (broadcast-shape-rule 'div)
+  #:dtype (same-dtype-rule 'div))
+
+(define-operator (neg x)
+  #:shape unary-shape-rule
+  #:dtype (same-dtype-rule 'neg))
+
+(define-operator (absolute x)
+  #:name abs
+  #:shape unary-shape-rule
+  #:dtype (same-dtype-rule 'abs))
+
+(define-operator (sqr x)
+  #:shape unary-shape-rule
+  #:dtype (same-dtype-rule 'sqr))
+
+(define-operator (rsqrt x)
+  #:shape unary-shape-rule
+  #:dtype (same-dtype-rule 'rsqrt))
+
+(define-operator (silu x)
+  #:shape unary-shape-rule
+  #:dtype (same-dtype-rule 'silu))
+
+(define-operator (mean x #:axis [axis : Integer] #:keep-dim? [keep-dim : Any #f])
+  #:shape reduce-shape-rule
+  #:dtype (same-dtype-rule 'mean))
+
+(define-operator (amax x #:axis [axis : Integer] #:keep-dim? [keep-dim : Any #f])
+  #:shape reduce-shape-rule
+  #:dtype (same-dtype-rule 'amax))
+
+(define-operator (argmax x #:axis [axis : Integer] #:keep-dim? [keep-dim : Any #f])
+  #:shape reduce-shape-rule
+  #:dtype i64-dtype-rule)
+
+(define-operator (to-dtype x #:dtype [dtype : Dtype])
+  #:name cast
+  #:shape unary-shape-rule
+  #:dtype cast-dtype-rule)

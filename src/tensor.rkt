@@ -1,25 +1,35 @@
 #lang typed/racket
 
-(require "shape.rkt")
+(require typed/racket/unsafe
+         "shape.rkt")
 
-(provide Shape
+(require/typed "runtime/ffi/raw.rkt" [#:opaque CTensor ctensor?])
+
+(provide CTensor
+         Shape
          shape?
          shape-numel
-         broadcast-shapes
+         shape-broadcast
          Dtype
          dtype?
          dtype-size
          Device
          device?
          current-device
-         Tensor
-         tensor?
-         tensor-shape
-         tensor-dtype
-         tensor-rank
-         tensor-numel
-         (struct-out real-tensor)
-         (struct-out sym-tensor))
+         Tensor)
+
+;; Tensor values cross to untyped model code on every operator call, and
+;; the opaque ctensor inside cannot be wrapped by generated contracts —
+;; this is the designated hot edge where generated contracts are dropped
+;; and tests stand guard instead.
+(unsafe-provide ctensor?
+                tensor?
+                tensor-shape
+                tensor-dtype
+                tensor-rank
+                tensor-numel
+                (struct-out real-tensor)
+                (struct-out sym-tensor))
 
 (define-type Dtype (U 'f32 'f16 'bf16 'i64 'i32 'u8 'bool))
 
@@ -52,7 +62,7 @@
   #:transparent)
 (struct real-tensor
   tensor
-  ([handle : Any] [device : Device])
+  ([handle : CTensor] [device : Device])
   #:transparent)
 (struct sym-tensor
   tensor
