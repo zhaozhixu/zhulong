@@ -11,6 +11,6 @@ __pycache__
 .agent-shell
 compiled/
 tests/data/
-doc/
 \#*\#
 .venv/
+weights/
