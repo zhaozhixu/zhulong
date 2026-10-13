@@ -4,10 +4,10 @@ A Racket-hosted large-model system: Racket owns model definition, symbolic
 optimization, and orchestration; heavy compute is delegated to libtorch and
 AOTInductor artifacts.
 
-- Design docs: debug/zhulong-design-zh.md (Chinese) and
-  debug/zhulong-design-en.md (English) — keep the two in sync when editing.
-- Implementation plan: debug/zhulong-impl-plan-zh.md (build order, module
-  map). Architecture changes go to the design docs first, then code.
+- Design doc: doc/design.md. Implementation plan: doc/impl-plan.md (build
+  order, module map, per-step records). Status snapshot:
+  doc/design-and-status.md. Architecture changes go to the design doc
+  first, then code.
 - Coding rules: STYLE.md at the repo root is canonical. Follow it strictly.
 
 ## Layout

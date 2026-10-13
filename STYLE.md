@@ -1,7 +1,7 @@
 # Zhulong Style Guide
 
 Canonical coding rules for this repository. This file is the single source of
-truth — the implementation plan (debug/zhulong-impl-plan-zh.md §1) defers to
+truth — the implementation plan (doc/impl-plan.md §1) defers to
 it — and doubles as context material for LLM-assisted coding: a conservative,
 predictable subset of Racket is the countermeasure to the niche-language
 corpus disadvantage.
