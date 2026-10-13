@@ -5,6 +5,7 @@
 ;; itself as ground truth.
 
 (require typed/racket/unsafe
+         "shape.rkt"
          "tensor.rkt"
          "operator.rkt")
 
@@ -15,14 +16,28 @@
 (unsafe-require/typed "runtime/ffi/ops.rkt"
                       [eager-available? (-> Boolean)]
                       [eager-run (-> Symbol (Listof Any) (Listof (Pairof Symbol Any)) CTensor)]
+                      [bytes->ctensor (-> Symbol (Listof Integer) Bytes CTensor)]
                       [ctensor-shape (-> CTensor (Listof Integer))]
                       [ctensor-dtype-sym (-> CTensor Symbol)])
 
 (provide eager-available?)
 
-;; The backend value and the thunk result both carry tensors across the
-;; typed/untyped line — same hot edge, same treatment.
-(unsafe-provide eager-backend call-with-eager)
+;; The backend value, the thunk result, and loaded tensors all carry
+;; ctensors across the typed/untyped line — same hot edge, same treatment.
+(unsafe-provide eager-backend call-with-eager bytes->tensor)
+
+(: bytes->tensor (-> Bytes Shape Dtype real-tensor))
+(define (bytes->tensor bs shape dt)
+  (unless (= (bytes-length bs) (* (shape-numel shape) (dtype-size dt)))
+    (raise-arguments-error 'bytes->tensor
+                           "byte count does not match shape"
+                           "shape"
+                           shape
+                           "dtype"
+                           dt
+                           "byte count"
+                           (bytes-length bs)))
+  (real-tensor shape dt (bytes->ctensor dt shape bs) 'cpu))
 
 (: unwrap (-> Value Any))
 (define (unwrap v)

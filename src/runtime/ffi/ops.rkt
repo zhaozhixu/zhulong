@@ -10,15 +10,21 @@
                      syntax/parse)
          ffi/unsafe
          racket/list
-         "raw.rkt"
+         (rename-in "raw.rkt" [bytes->ctensor unowned-bytes->ctensor])
          "wrapper.rkt"
          (only-in "../../operators/matmul.rkt" matmul-plan))
 
 (provide eager-available?
          eager-run
+         bytes->ctensor
          ctensor-shape
          ctensor-dtype-sym
          ctensor-contiguous)
+
+;; The owning variant of the raw constructor: the returned ctensor is
+;; finalized like every other ctensor produced by this module.
+(define (bytes->ctensor dtype shape bs)
+  (own (unowned-bytes->ctensor dtype shape bs)))
 
 (define (eager-available?)
   (and (libtorch-available?) (shim-available?)))
@@ -318,14 +324,28 @@
         (append (take strides d) (list new-stride) (drop strides d))
         (ctensor-storage-offset x)))
 
-(define (as-ctensor v)
-  (if (real? v)
-      (own (real->ctensor v))
-      v))
+;; Scalar arguments are weak-dtyped: they enter the kernel in the dtype
+;; the tensor operands agreed on, never as f64 tensors that would win
+;; type promotion.
+(define (as-ctensor v target)
+  (cond
+    [(real? v)
+     (define h (own (real->ctensor v)))
+     (cond
+       [(or (not target) (eq? target 'f64)) h]
+       [else
+        (define out (own (make-ctensor target '())))
+        (ctensor-copy! out h)
+        out])]
+    [else v]))
 
 (define (eager-run name args attrs)
   (define f
     (hash-ref impls
               name
               (lambda () (raise-arguments-error 'eager "no eager implementation" "operator" name))))
-  (f (map as-ctensor args) attrs))
+  (define target
+    (for/first ([a (in-list args)]
+                #:unless (real? a))
+      (ctensor-dtype-sym a)))
+  (f (map (lambda (v) (as-ctensor v target)) args) attrs))

@@ -1,6 +1,6 @@
 RACO ?= raco
 
-.PHONY: setup setup-python shim reference compile test fmt clean
+.PHONY: setup setup-python shim reference weights model-reference compile test fmt clean
 
 setup-python:
 	sh tools/setup-python.sh
@@ -10,6 +10,14 @@ shim:
 
 reference:
 	.venv/bin/python tools/gen-reference.py
+
+weights:
+	mkdir -p weights/SmolLM2-135M
+	curl -L -o weights/SmolLM2-135M/model.safetensors \
+	  https://huggingface.co/HuggingFaceTB/SmolLM2-135M/resolve/main/model.safetensors
+
+model-reference:
+	.venv/bin/python tools/gen-model-reference.py
 
 setup:
 	$(RACO) pkg install --skip-installed --link --name zhulong ./src
